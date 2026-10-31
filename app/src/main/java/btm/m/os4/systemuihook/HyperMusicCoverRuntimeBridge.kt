@@ -8,6 +8,7 @@ import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.widget.ImageView
+import android.widget.Toast
 import btm.m.os4.systemuihook.hypermusiccover.next.Main
 import btm.m.os4.systemuihook.hypermusiccover.next.island.MiniPlayerConfig
 import btm.m.os4.systemuihook.hypermusiccover.next.island.MiniPlayerRuntime
@@ -16,6 +17,9 @@ import org.json.JSONObject
 
 /** The host owns package dispatch; upstream owns media state, gestures and view lifecycles. */
 object HyperMusicCoverRuntimeBridge {
+    private const val KEY_LOCKSCREEN_MUSIC_LOCKSCREEN_ENABLED =
+        "lockscreen_music_lockscreen_enabled"
+
     @JvmStatic fun tr(context: Context?, key: String, fallback: String): String =
         context?.let { UnlockIslandRuntime.tr(it, key, fallback) } ?: fallback
 
@@ -39,6 +43,8 @@ object HyperMusicCoverRuntimeBridge {
     private var preferences: SharedPreferences? = null
     private var context: Context? = null
     private var installed = false
+    @Volatile private var hmcConflictDetected = false
+    private var conflictToastShown = false
     private val handler = Handler(Looper.getMainLooper())
     private val refresh = Runnable { applySettings() }
     private val sentSettings = HashMap<String, String>()
@@ -61,11 +67,57 @@ object HyperMusicCoverRuntimeBridge {
             "com.android.systemui" -> {
                 if (installed) return
                 installed = true
-                preferences = module.getRemotePreferences(REMOTE_PREFERENCE_GROUP).also {
+
+                val remotePreferences = module.getRemotePreferences(REMOTE_PREFERENCE_GROUP)
+                val processContext = currentProcessContext()
+                val conflict = processContext?.let { HmcConflictDetector.find(it) }
+                if (conflict != null) {
+                    hmcConflictDetected = true
+                    // This is HC's own preference. Never write to the standalone HMC app.
+                    remotePreferences.edit()
+                        .putBoolean(KEY_LOCKSCREEN_MUSIC_LOCKSCREEN_ENABLED, false)
+                        .apply()
+                    musicEnabled = false
+                    processContext?.let { showConflictToast(it) }
+                    ModuleLog.w(
+                        "HyperMusicCover",
+                        "Detected HMC-compatible module ${conflict.packageName} (${conflict.reason}); disabled HC music lockscreen",
+                    )
+                }
+
+                preferences = remotePreferences.also {
                     it.registerOnSharedPreferenceChangeListener(listener)
                 }
                 MiniPlayerRuntime.hostMaterial = material
+
+                // Keep Main.install() and the wallpaper-process dispatch intact. Its non-music
+                // features (including the mini-player) still need their normal lifecycle.
+                // The persisted HC music-lockscreen switch is already false before Main boots.
                 Main.install(module, loader)
+            }
+        }
+    }
+
+    private fun currentProcessContext(): Context? = runCatching {
+        val activityThread = Class.forName("android.app.ActivityThread")
+        (activityThread.getMethod("currentApplication").invoke(null) as? Context)
+            ?: runCatching {
+                val thread = activityThread.getMethod("currentActivityThread").invoke(null)
+                thread?.javaClass?.getMethod("getSystemContext")?.invoke(thread) as? Context
+            }.getOrNull()
+    }.getOrNull()
+
+    private fun showConflictToast(appContext: Context) {
+        if (conflictToastShown) return
+        conflictToastShown = true
+        val safeContext = appContext.applicationContext
+        handler.post {
+            runCatching {
+                Toast.makeText(
+                    safeContext,
+                    "检测到 HMC 或其分支，已关闭 HC 的音乐锁屏",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }
@@ -90,7 +142,11 @@ object HyperMusicCoverRuntimeBridge {
         val prefs = preferences ?: return
         val ctx = context ?: return
         val s = readHyperMusicCoverSettings(prefs)
-        val music = prefs.getBoolean("lockscreen_music_lockscreen_enabled", false)
+        val requestedMusic = prefs.getBoolean(KEY_LOCKSCREEN_MUSIC_LOCKSCREEN_ENABLED, false)
+        if (hmcConflictDetected && requestedMusic) {
+            prefs.edit().putBoolean(KEY_LOCKSCREEN_MUSIC_LOCKSCREEN_ENABLED, false).apply()
+        }
+        val music = requestedMusic && !hmcConflictDetected
         val lyrics = prefs.getBoolean("lockscreen_music_lyrics_enabled", false) ||
             prefs.getBoolean("lockscreen_mini_player_lyrics_enabled", false)
         val island = prefs.getBoolean("lockscreen_mini_player_enabled", false) &&

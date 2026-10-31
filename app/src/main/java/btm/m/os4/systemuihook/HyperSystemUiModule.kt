@@ -1027,33 +1027,14 @@ class HyperSystemUiModule : XposedModule() {
 
 
 
-    private fun currentApplicationContext(): Context? = runCatching {
-        Class.forName("android.app.ActivityThread")
-            .getMethod("currentApplication")
-            .invoke(null) as? Context
-    }.getOrNull()
-
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (!HookModuleSafety.enter(this, param.packageName)) return
         if (!OsCompatibility.areHooksAllowed()) return
-        val hmcConflict = if (param.packageName == SYSTEM_UI || param.packageName == LOCKSCREEN_WALLPAPER) {
-            currentApplicationContext()?.let(HmcConflictDetector::findInstalled)
-        } else null
-        if (param.packageName == SYSTEM_UI && hmcConflict != null) {
-            currentApplicationContext()?.let { HmcConflictDetector.notifyConflict(it, hmcConflict) }
-        }
-        // The standalone HMC module (including forks retaining its Xposed/source markers) owns
-        // the same SystemUI music-lockscreen and wallpaper hooks. Skip only that runtime; keep
-        // HyperChanger's unrelated SystemUI, lockscreen, wallpaper-depth and app hooks intact.
-        if (hmcConflict == null) {
-            runCatching {
-                HyperMusicCoverRuntimeBridge.install(this, param.packageName, param.defaultClassLoader) { view, loader ->
-                    applyMiniPlayerMaterial(view, miniPlayerAppearance(getRemotePreferences(REMOTE_PREFERENCE_GROUP)), loader)
-                }
-            }.onFailure { HookModuleLogger.log(this, android.util.Log.ERROR, "HyperMusicCover", "Runtime installation failed in ${param.packageName}", it) }
-        } else {
-            HookModuleLogger.log(this, android.util.Log.WARN, "HyperMusicCover", "Skipped integrated runtime for ${param.packageName}; standalone HMC detected: ${hmcConflict.packageName}")
-        }
+        runCatching {
+            HyperMusicCoverRuntimeBridge.install(this, param.packageName, param.defaultClassLoader) { view, loader ->
+                applyMiniPlayerMaterial(view, miniPlayerAppearance(getRemotePreferences(REMOTE_PREFERENCE_GROUP)), loader)
+            }
+        }.onFailure { HookModuleLogger.log(this, android.util.Log.ERROR, "HyperMusicCover", "Runtime installation failed in ${param.packageName}", it) }
         if (param.packageName == "com.xiaomi.trustservice") {
             val preferences = getRemotePreferences(REMOTE_PREFERENCE_GROUP)
             if (preferences.isEnvironmentDetectionEnabled() && preferences.getBoolean(KEY_TRUSTSERVICE_DIAGNOSTICS, false)) {
