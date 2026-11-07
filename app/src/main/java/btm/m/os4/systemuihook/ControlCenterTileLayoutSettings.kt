@@ -11,6 +11,7 @@ internal const val KEY_CC_TILE_LAYOUT_ENABLED = "control_center_tile_layout_enab
 internal const val KEY_CC_TILE_LAYOUT = "control_center_tile_layout_v1"
 internal const val KEY_CC_MEDIA_SOURCE_ICON_HIDDEN = "control_center_media_source_icon_hidden"
 internal const val KEY_CC_SMALL_TILE_AUTO_FILL = "control_center_small_tile_auto_fill"
+internal const val KEY_CC_MEDIA_EXPANDED_STYLE = "control_center_media_expanded_style"
 
 internal data class CcTile(val id: String, val col: Int, val row: Int, val w: Int, val h: Int) {
     val slider get() = id == "brightness" || id == "volume"
@@ -96,6 +97,7 @@ internal data class CcTileLayoutSettings(
     val tiles: List<CcTile> = CcTileLayouts.initial,
     val mediaSourceIconHidden: Boolean = false,
     val smallTileAutoFill: Boolean = false,
+    val mediaExpandedStyle: Boolean = false,
     val rememberedSizes: Map<String, Pair<Int, Int>> = emptyMap(),
 )
 
@@ -104,6 +106,7 @@ internal fun readCcTileLayoutSettings(p: SharedPreferences) = CcTileLayoutSettin
     CcTileLayouts.decode(p.getString(KEY_CC_TILE_LAYOUT, null)),
     p.getBoolean(KEY_CC_MEDIA_SOURCE_ICON_HIDDEN, false),
     p.getBoolean(KEY_CC_SMALL_TILE_AUTO_FILL, false),
+    p.getBoolean(KEY_CC_MEDIA_EXPANDED_STYLE, false),
     CcTileSizeMemory.read(p),
 )
 
@@ -113,6 +116,7 @@ internal fun completeCcTileLayoutPreset(values: JSONObject) {
     if (!values.has(KEY_CC_TILE_LAYOUT)) values.put(KEY_CC_TILE_LAYOUT, JSONObject().put("type", "string").put("value", CcTileLayouts.encode(CcTileLayouts.initial)))
     if (!values.has(KEY_CC_MEDIA_SOURCE_ICON_HIDDEN)) values.put(KEY_CC_MEDIA_SOURCE_ICON_HIDDEN, JSONObject().put("type", "boolean").put("value", false))
     if (!values.has(KEY_CC_SMALL_TILE_AUTO_FILL)) values.put(KEY_CC_SMALL_TILE_AUTO_FILL, JSONObject().put("type", "boolean").put("value", false))
+    if (!values.has(KEY_CC_MEDIA_EXPANDED_STYLE)) values.put(KEY_CC_MEDIA_EXPANDED_STYLE, JSONObject().put("type", "boolean").put("value", false))
     CcTileSizeMemory.completePreset(values)
 }
 
@@ -138,7 +142,8 @@ internal class ControlCenterTileLayoutSettingsStore(private val local: SharedPre
         p.edit().putBoolean(KEY_CC_TILE_LAYOUT_ENABLED, settings.enabled)
             .putString(KEY_CC_TILE_LAYOUT, CcTileLayouts.encode(settings.tiles))
             .putBoolean(KEY_CC_MEDIA_SOURCE_ICON_HIDDEN, settings.mediaSourceIconHidden)
-            .putBoolean(KEY_CC_SMALL_TILE_AUTO_FILL, settings.smallTileAutoFill).apply()
+            .putBoolean(KEY_CC_SMALL_TILE_AUTO_FILL, settings.smallTileAutoFill)
+            .putBoolean(KEY_CC_MEDIA_EXPANDED_STYLE, settings.mediaExpandedStyle).apply()
         CcTileSizeMemory.write(p, settings.rememberedSizes)
     }
 }

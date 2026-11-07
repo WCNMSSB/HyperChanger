@@ -98,7 +98,7 @@ internal class ControlCenterTileLayoutHook(private val module: XposedModule) {
                             reference.get()?.let { rv ->
                                 refreshTileSelection(adapter)
                                 // Drop stale saved anchors after dimensions/order change; OEM lays out from top.
-                                if (key == null || key == KEY_CC_TILE_LAYOUT || key == KEY_CC_TILE_LAYOUT_ENABLED || key == KEY_CC_SMALL_TILE_AUTO_FILL) {
+                                if (key == null || key == KEY_CC_TILE_LAYOUT || key == KEY_CC_TILE_LAYOUT_ENABLED || key == KEY_CC_SMALL_TILE_AUTO_FILL || key == KEY_CC_MEDIA_EXPANDED_STYLE) {
                                     call(adapter, "notifyDataSetChanged")
                                 }
                                 call(rv, "scrollToPosition", 0)
@@ -672,7 +672,7 @@ internal class ControlCenterTileLayoutHook(private val module: XposedModule) {
                     if (t != null && adapter != null && panels[adapter]?.get() === parent &&
                         field(adapter, "mode")?.toString() == "NORMAL" && field(adapter, "style")?.toString() == "VERTICAL") {
                         if (t.id == "media") layoutMedia(root, t) else if (!t.slider) layoutCard(root, t)
-                    } else if ((t == null || t.id == "media") &&
+                    } else if (settings.mediaExpandedStyle && (t == null || t.id == "media") &&
                         find(root, "cover") != null && insideExpandedMediaPanel(root)) {
                         layoutExpandedMedia(root)
                     } else if ((t == null || t.id == "media") && hasExpandedControls(root)) {
